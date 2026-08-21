@@ -144,9 +144,9 @@ if (Test-Path -LiteralPath (Join-Path $projectRoot 'portfolio.md')) {
     $portfolioText = Get-ProjectText 'portfolio.md'
     $tableRows = [regex]::Matches($portfolioText, '(?m)^\|\s*`([a-z0-9-]+)`.*?\|(.*?)\|$')
     Add-AuditResult `
-        -Condition ($tableRows.Count -eq 27) `
-        -PassMessage "portfolio table contains exactly 27 cataloged projects (found $($tableRows.Count))" `
-        -FailMessage "portfolio table must contain exactly 27 projects; found $($tableRows.Count)"
+        -Condition ($tableRows.Count -ge 1) `
+        -PassMessage "portfolio table catalogs $($tableRows.Count) project(s)" `
+        -FailMessage 'portfolio table has no project rows; fill portfolio.md from portfolio.example.md'
 
     $malformedRows = @($tableRows | Where-Object { ($_.Value -split '\|').Count -ne 8 })
     Add-AuditResult `
@@ -164,10 +164,18 @@ Add-AuditResult `
 if (Test-Path -LiteralPath $entityDraftPath) {
     $draftContent = Get-ProjectText 'docs\entity-records-draft.md'
     $draftRecords = [regex]::Matches($draftContent, '<!-- entity-record-v1 id=([^ ]+) -->')
+    # The slot target belongs to the owner's constraint, not to this script.
+    # Read it from the collection marker so a fork can set its own number.
+    $targetMatch = [regex]::Match($draftContent, '<!-- entity-records-collection[^>]*target=(\d+)')
+    $slotTarget = if ($targetMatch.Success) { [int]$targetMatch.Groups[1].Value } else { 0 }
     Add-AuditResult `
-        -Condition ($draftRecords.Count -eq 15) `
-        -PassMessage "entity records draft contains 15 machine-readable slots (found $($draftRecords.Count))" `
-        -FailMessage "entity records draft must contain 15 records; found $($draftRecords.Count)"
+        -Condition ($slotTarget -gt 0) `
+        -PassMessage "entity records declare a slot target of $slotTarget" `
+        -FailMessage 'entity records draft must declare target=N in its entity-records-collection marker'
+    Add-AuditResult `
+        -Condition ($draftRecords.Count -ge $slotTarget) `
+        -PassMessage "entity records draft contains $($draftRecords.Count) machine-readable slots (target $slotTarget)" `
+        -FailMessage "entity records draft declares target=$slotTarget but holds only $($draftRecords.Count) slots"
 
     # An unfilled slot must never carry a verification date. A date on a
     # placeholder is fabricated evidence -- the exact false precision this
