@@ -49,6 +49,9 @@ pwsh -File ./scripts/audit-project.ps1
 pwsh -File ./scripts/majlis-cli.ps1 status
 ```
 
+‏لوحة الحالة تعرض قيد مالك المستودع افتراضياً. عدّل كتلة `$ActiveConstraint` و`$deadlines`
+‏في أعلى `scripts/majlis-cli.ps1` لتشير إلى قيدك ومواعيدك أنت.
+
 ‏ثم افتح المجلد في ‎Claude Code‏ أو ‎Codex‏ واسأل سؤالك الاستراتيجي مباشرة. مهارة `consultation`
 ‏هي نقطة الدخول: تقرأ دين قراراتك المفتوحة أولاً، وترفض إعطاءك رأياً جديداً فوق توصية سابقة
 ‏لم تُنفَّذ ولم تُعلَن مهملة.

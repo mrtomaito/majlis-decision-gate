@@ -33,6 +33,17 @@ param(
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
 
+# ---------------------------------------------------------------------------
+# FORK CONFIG -- edit this block to point the dashboard at YOUR constraint.
+# These are the repo owner's values; they are copy, not logic.
+# ---------------------------------------------------------------------------
+$ActiveConstraint = @{
+    Project     = 'ai-freelance-income (KADR)'
+    LaunchState = 'Validation Candidate (0 named buyers, 0 PII)'
+    Sprint      = 'Build 15 entity-record-v1 slots before 2026-09-03'
+    Metric      = 'Complete entity records count (Internal Draft)'
+}
+
 try {
     [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
     $OutputEncoding = [System.Text.Encoding]::UTF8
@@ -79,10 +90,10 @@ function Show-Status {
 
     Write-Host "  Current Active Constraint:" -ForegroundColor White
     Write-Host "  --------------------------------------------------------------------" -ForegroundColor DarkGray
-    Write-Host "  Selected Project : ai-freelance-income (KADR)" -ForegroundColor Green
-    Write-Host "  Launch State     : Validation Candidate (0 named buyers, 0 PII)" -ForegroundColor Yellow
-    Write-Host "  Weekly Sprint    : Build 15 entity-record-v1 slots before 2026-09-03" -ForegroundColor Cyan
-    Write-Host "  Single Metric    : Complete entity records count (Internal Draft)" -ForegroundColor White
+    Write-Host ("  Selected Project : {0}" -f $ActiveConstraint.Project) -ForegroundColor Green
+    Write-Host ("  Launch State     : {0}" -f $ActiveConstraint.LaunchState) -ForegroundColor Yellow
+    Write-Host ("  Weekly Sprint    : {0}" -f $ActiveConstraint.Sprint) -ForegroundColor Cyan
+    Write-Host ("  Single Metric    : {0}" -f $ActiveConstraint.Metric) -ForegroundColor White
     Write-Host ''
 
     # Check draft entities
@@ -195,11 +206,14 @@ function Verify-EntityRecords {
         if ((-not $hasPlaceholder) -and $hasRealDate) { $filled++ }
     }
 
-    Write-Host "  Slots FILLED with a real entity: $filled of 15" -ForegroundColor White
-    if ($filled -ge 15) {
-        Write-Host "  [PASS] 15 entity-record-v1 records are filled and dated." -ForegroundColor Green
+    $tMatch = [regex]::Match($content, '<!-- entity-records-collection[^>]*target=(\d+)')
+    $target = if ($tMatch.Success) { [int]$tMatch.Groups[1].Value } else { $records.Count }
+
+    Write-Host "  Slots FILLED with a real entity: $filled of $target" -ForegroundColor White
+    if ($target -gt 0 -and $filled -ge $target) {
+        Write-Host "  [PASS] $target entity-record-v1 records are filled and dated." -ForegroundColor Green
     } else {
-        Write-Host "  [OPEN] Constraint #001 preliminary gate NOT met: $filled/15 filled ($(15 - $filled) remaining)." -ForegroundColor Yellow
+        Write-Host "  [OPEN] Preliminary gate NOT met: $filled/$target filled ($($target - $filled) remaining)." -ForegroundColor Yellow
         Write-Host "         Empty template slots are craft scaffolding, not market progress." -ForegroundColor Yellow
     }
     Write-Host ''
