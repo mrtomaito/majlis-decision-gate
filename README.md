@@ -32,9 +32,10 @@
 
 ```bash
 git clone https://github.com/mrtomaito/majlis-decision-gate.git
-cd majlis-advisor
+cd majlis-decision-gate
 cp portfolio.example.md portfolio.md
 cp docs/entity-records-draft.example.md docs/entity-records-draft.md
+cp docs/decision-log.example.md docs/decision-log.md
 ```
 
 ‏املأ `portfolio.md` بمشاريعك الحقيقية، ثم شغّل المدقق الحتمي:
