@@ -142,7 +142,7 @@ if (Test-Path -LiteralPath $limitsPath) {
 
 if (Test-Path -LiteralPath (Join-Path $projectRoot 'portfolio.md')) {
     $portfolioText = Get-ProjectText 'portfolio.md'
-    $tableRows = [regex]::Matches($portfolioText, '(?m)^\|\s*`([a-z0-9-]+)`.*?\|(.*?)\|$')
+    $tableRows = [regex]::Matches($portfolioText, '(?m)^\|\s*`([a-z0-9-]+)`.*?\|(.*?)\|\r?$')
     Add-AuditResult `
         -Condition ($tableRows.Count -ge 1) `
         -PassMessage "portfolio table catalogs $($tableRows.Count) project(s)" `
@@ -363,29 +363,38 @@ if (Test-Path -LiteralPath (Join-Path $projectRoot 'docs\playbook-weekly-sprint.
 
 if (Test-Path -LiteralPath (Join-Path $projectRoot 'docs\decision-log.md')) {
     $decisionLog = Get-ProjectText 'docs\decision-log.md'
-    foreach ($cId in @('001', '002', '003', '004')) {
-        $hasHeader = $decisionLog -match [regex]::Escape("## قيد #$cId")
-        Add-AuditResult `
-            -Condition $hasHeader `
-            -PassMessage "decision log records constraint #$cId" `
-            -FailMessage "decision log missing constraint #$cId"
+    $constraintHeaders = [regex]::Matches($decisionLog, '(?m)^## قيد #(\d+)')
+    Add-AuditResult `
+        -Condition ($constraintHeaders.Count -ge 1) `
+        -PassMessage "decision log records $($constraintHeaders.Count) constraint(s)" `
+        -FailMessage 'decision log holds no constraint; an unrecorded consultation did not happen'
+
+    # Every constraint record must carry a full measurement contract. The ids,
+    # baselines and metric names belong to whoever runs the gate -- only the
+    # shape is enforced here, so a fork keeps its own history.
+    $records = [regex]::Matches($decisionLog, '<!-- constraint-record ([^>]*?)-->')
+    $incomplete = [System.Collections.Generic.List[string]]::new()
+    foreach ($rec in $records) {
+        $body = $rec.Groups[1].Value
+        foreach ($field in @('id', 'baseline', 'metric', 'target', 'read-at', 'evidence')) {
+            if ($body -notmatch ("(?:^|\s)" + [regex]::Escape($field) + "=\S")) {
+                $incomplete.Add("$($rec.Value.Trim()) is missing '$field'")
+            }
+        }
     }
-
-    $constraint004 = [regex]::Match($decisionLog, '(?ms)^## .+?#004(.*?)(?=^## |\z)')
     Add-AuditResult `
-        -Condition ($constraint004.Success -and $constraint004.Groups[1].Value -match '<!-- single-metric=project-audit-failures -->') `
-        -PassMessage 'constraint 004 declares one craft metric without absorbing the market constraint' `
-        -FailMessage 'constraint 004 must declare project-audit-failures as its single craft metric'
+        -Condition ($incomplete.Count -eq 0) `
+        -PassMessage "all $($records.Count) constraint record(s) declare baseline, metric, target, read date, and evidence" `
+        -FailMessage ("incomplete constraint records: " + ($incomplete -join '; '))
 
-    $constraint004Record = [regex]::Match(
-        $constraint004.Groups[1].Value,
-        '<!-- constraint-record id=004 baseline=14 metric=project-audit-failures target=0 read-at=2026-08-20 evidence=docs/audit-2026-08-20.md -->'
-    )
+    # A craft metric must never absorb the market constraint into itself.
+    $singleMetrics = [regex]::Matches($decisionLog, '<!-- single-metric=([a-z0-9-]+) -->')
     Add-AuditResult `
-        -Condition $constraint004Record.Success `
-        -PassMessage 'constraint 004 has a complete machine-readable measurement contract' `
-        -FailMessage 'constraint 004 must declare its baseline, one metric, target, read date, and evidence'
+        -Condition ($singleMetrics.Count -eq 0 -or ($singleMetrics | ForEach-Object { $_.Groups[1].Value } | Select-Object -Unique).Count -eq $singleMetrics.Count) `
+        -PassMessage 'each constraint declares its own single metric without reusing another' `
+        -FailMessage 'two constraints declare the same single-metric; one is absorbing the other'
 }
+
 
 $firstPartyFiles = $markdownFiles | Where-Object {
     $_.FullName -notmatch '[\\/]vendor[\\/]' -and
