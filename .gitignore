@@ -1,0 +1,27 @@
+# System files
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# Temporary & cache files
+*.tmp
+*.temp
+*~
+*.log
+.cache/
+
+# Restricted contact data stores (forbidden from git repository)
+private/
+restricted-store/
+*.private.json
+*.contacts.csv
+
+# ---- Private ledger: owner's real portfolio, buyers, and financials ----
+# The framework is public; the owner's book is not. Each file below has a
+# published *.example.md counterpart so anyone can run the gate on their own data.
+portfolio.md
+docs/decision-log.md
+docs/entity-records-draft.md
+docs/triage-run-2026-08-20.md
+docs/audit-2026-08-20.md
+docs/CLAUDE.backup-*.md
