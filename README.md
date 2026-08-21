@@ -31,7 +31,7 @@
 ## ‏التشغيل
 
 ```bash
-git clone https://github.com/mrtomaito/majlis-advisor.git
+git clone https://github.com/mrtomaito/majlis-decision-gate.git
 cd majlis-advisor
 cp portfolio.example.md portfolio.md
 cp docs/entity-records-draft.example.md docs/entity-records-draft.md
