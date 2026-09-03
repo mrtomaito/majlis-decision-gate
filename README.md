@@ -36,6 +36,7 @@ cd majlis-decision-gate
 cp portfolio.example.md portfolio.md
 cp docs/entity-records-draft.example.md docs/entity-records-draft.md
 cp docs/decision-log.example.md docs/decision-log.md
+cp docs/unit-economics-book.example.md docs/unit-economics-book.md
 ```
 
 ‏املأ `portfolio.md` بمشاريعك الحقيقية، ثم شغّل المدقق الحتمي:
@@ -49,6 +50,36 @@ pwsh -File ./scripts/audit-project.ps1
 ```bash
 pwsh -File ./scripts/majlis-cli.ps1 status
 ```
+
+‏وفرز المحفظة والتحقق من سجل الكيانات ومحاكاة CVI:
+
+```bash
+pwsh -File ./scripts/majlis-cli.ps1 triage
+pwsh -File ./scripts/majlis-cli.ps1 verify-entity
+pwsh -File ./scripts/majlis-cli.ps1 calc-cvi -Revenue 600 -Days 14 -Margin 0.85
+```
+
+‏ويمكن تمرير `-Json` لأي أمر للحصول على مخرجات مهيكلة للأتمتة والوكلاء:
+
+```bash
+pwsh -File ./scripts/majlis-cli.ps1 triage -Json
+pwsh -File ./scripts/majlis-cli.ps1 audit -Json
+```
+
+‏وأمر واحد يثبت الطرفين معاً — المدقق يقرأ الوثائق، ومجموعة التعاقد تشغّل الأداة نفسها.
+‏يفشل إن فشل أيٌّ منهما:
+
+```bash
+pwsh -File ./scripts/majlis-cli.ps1 verify
+```
+
+‏ولتشغيل مجموعة التعاقد وحدها:
+
+```bash
+pwsh -File ./scripts/majlis-cli.ps1 test
+```
+
+‏تعمل الأداة على `pwsh` وعلى Windows PowerShell 5.1؛ تحلّ المضيف من `PATH` ولا تثبّت اسمه.
 
 ‏لوحة الحالة تعرض قيد مالك المستودع افتراضياً. عدّل كتلة `$ActiveConstraint` و`$deadlines`
 ‏في أعلى `scripts/majlis-cli.ps1` لتشير إلى قيدك ومواعيدك أنت.
@@ -68,9 +99,11 @@ pwsh -File ./scripts/majlis-cli.ps1 status
 | `docs/evidence-standard.md` | عقد المشتري، درجات الدليل، وفصل التنفيذ عن الصنعة عن النتيجة |
 | `docs/privacy-data-handling.md` | عقد المخزن المقيد والموافقة وفق نظام حماية البيانات السعودي |
 | `docs/source-register.md` | سجل المصادر وعقد صلاحيتها الزمنية |
-| `docs/playbook-*.md` | سبعة كتيبات ميدانية: مبيعات صادرة، هندسة عروض، تحطيم اعتراضات، ما قبل الفشل، اقتصاديات وحدة، سبرنت أسبوعي |
+| `docs/playbook-*.md` | كتيبات ميدانية للمبيعات الصادرة وهندسة العروض والاعتراضات وما قبل الفشل واقتصاديات الوحدة والسبرنت الأسبوعي |
 | `vendor/wondelai/` | ‏13 إطاراً من كتب مرجعية (‎MIT‏)، كل واحد بحدود فشله في `LIMITS.md` |
-| `scripts/audit-project.ps1` | مدقق حتمي بـ‎100‏ فحص يرفض الدليل الملفَّق |
+| `scripts/audit-project.ps1` | مدقق حتمي يرفض الدليل الملفَّق ويفشل عند تجاوز بوابة السوق، مع دعم `-Json` |
+| `scripts/majlis-cli.ps1` | أداة قياس حتمية للحالة والفرز وسجلات الكيانات ومحاكاة CVI، وأمرا `test` و`verify` |
+| `tests/cli-contracts.ps1` | مجموعة تعاقد تشغّل كل أمر نصياً وبـ`-Json` وتختبر الحدود والمدخلات الرافضة |
 
 ---
 
@@ -82,6 +115,11 @@ pwsh -File ./scripts/majlis-cli.ps1 status
 
 ‏المدقق الآن يفصل «الخانة موجودة» عن «الخانة مملوءة»، ويفشل إذا حمل حقل فارغ تاريخ تحقق.
 ‏والقاعدة المستخلصة مكتوبة في السجل: **أي فحص جديد يجب أن يسأل «هل يمكن أن أمرّ وأنا لم أفعل شيئاً؟»**
+
+‏ثم وقع العَرَض نفسه مرة ثانية: ارتفع العدد ‎96 ← 108 ← 138‏ عبر ثلاث جلسات، والخانات المملوءة صفر طوال المدة.
+‏فأُضيفت **بوابة سوقية لها تاريخ انتهاء**: يقرأ المدقق `gate=` من مسودة الكيانات، ويطبع سطر `MARKET` **آخر** كل
+‏تشغيل مهما كان اللون، ويفشل فشلاً صريحاً إذا مرّ التاريخ والقائمة فارغة. إصلاح الصنعة لا يُطفئ هذا الفشل —
+‏خانة مملوءة وحدها تطفئه.
 
 ---
 
@@ -99,7 +137,8 @@ pwsh -File ./scripts/majlis-cli.ps1 status
 - ‏الوثائق **بالعربية**؛ أسماء الملفات والمجلدات لاتينية `kebab-case`.
 - ‏المدقق يحتاج ‎PowerShell‏ (‎`pwsh`‏ يعمل على ‎Linux/macOS‏ أيضاً).
 - ‏**لا يحل محل استشارة قانونية أو محاسبية.** مراجع الأنظمة في `docs/source-register.md` تثبت ما في عمود «النطاق» فقط.
-- ‏دفتر مالك المستودع وسجل قراراته وسجلات كياناته **غير منشورة** — تجد نماذجها في ملفات `*.example.md`.
+- ‏دفتر مالك المستودع وسجل قراراته وسجلات كياناته **ودفتر اقتصاديات الوحدة** غير منشورة — تجد نماذجها في ملفات `*.example.md`.
+  ‏الأخير حمل إيجاراً وحرقاً شهرياً كانا مكتوبين داخل `scripts/majlis-cli.ps1` حتى 2026-08-30، وفحصٌ في المدقق يمنع عودتهما.
 
 ---
 
