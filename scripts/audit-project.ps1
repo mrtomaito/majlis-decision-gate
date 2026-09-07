@@ -7,6 +7,11 @@ param(
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $failures = [System.Collections.Generic.List[string]]::new()
+
+# Set by the market-gate block below and read by the commitment-device check in
+# the decision-log block. Default false so a fork with no entity draft is never
+# accused of breaching a gate it did not declare.
+$script:MarketGateBreached = $false
 $passes = [System.Collections.Generic.List[string]]::new()
 
 function Add-AuditResult {
@@ -237,6 +242,7 @@ if (Test-Path -LiteralPath $entityDraftPath) {
         $gateDate = [datetime]::ParseExact($gateMatch.Groups[1].Value, 'yyyy-MM-dd', $null)
         $daysToGate = ($gateDate - [datetime]::Today).Days
         $marketState = "$filledRecords of $slotTarget slot(s) filled with a real entity"
+        $script:MarketGateBreached = ($daysToGate -lt 0) -and ($filledRecords -lt $slotTarget)
         Add-AuditResult `
             -Condition (($daysToGate -ge 0) -or ($filledRecords -ge $slotTarget)) `
             -PassMessage $(if ($filledRecords -ge $slotTarget) { "market gate met: $marketState" } else { "market gate open: $marketState, $daysToGate day(s) to $($gateMatch.Groups[1].Value)" }) `
@@ -404,6 +410,24 @@ if (Test-Path -LiteralPath (Join-Path $projectRoot 'docs\evidence-standard.md'))
     }
 }
 
+# The constraint contract is enforced in code below; this keeps the published
+# standard from drifting away from what the code actually requires. A contract
+# documented in one place and enforced in another is two contracts.
+if (Test-Path -LiteralPath (Join-Path $projectRoot 'docs\evidence-standard.md')) {
+    $standard = Get-ProjectText 'docs\evidence-standard.md'
+    $contractBlock = [regex]::Match($standard, '<!-- constraint-contract-v2 -->(.*?)<!-- /constraint-contract-v2 -->', 'Singleline')
+    Add-AuditResult `
+        -Condition $contractBlock.Success `
+        -PassMessage 'evidence standard declares the machine-readable constraint-contract-v2 block' `
+        -FailMessage 'docs/evidence-standard.md must declare a constraint-contract-v2 block; the auditor enforces fields the standard does not publish'
+    foreach ($field in @('id', 'baseline', 'metric', 'target', 'read-at', 'evidence', 'mover', 'status', 'confidence')) {
+        Add-AuditResult `
+            -Condition ($contractBlock.Success -and $contractBlock.Groups[1].Value -match [regex]::Escape("field=$field")) `
+            -PassMessage "constraint-contract-v2 declares $field" `
+            -FailMessage "constraint-contract-v2 must declare $field"
+    }
+}
+
 if (Test-Path -LiteralPath (Join-Path $projectRoot 'docs\privacy-data-handling.md')) {
     $privacy = Get-ProjectText 'docs\privacy-data-handling.md'
     foreach ($policy in @(
@@ -466,10 +490,19 @@ if (Test-Path -LiteralPath (Join-Path $projectRoot 'docs\decision-log.md')) {
         # -- constraints #002 and #003 say exactly that in prose. That shape is
         # a contract, not an exemption: it still names a parent and a read date,
         # and inventing a baseline for it after the fact is what the log forbids.
+        # 'mover' and 'status' joined the contract on 2026-09-06. 'mover' names
+        # who must act for the number to move; 'status' makes a closure readable
+        # by machine instead of parsed out of prose. 'confidence' is required
+        # only while a constraint is OPEN -- a probability written after the
+        # outcome is not a forecast, it is the fabricated evidence constraint
+        # #005 was opened to stop.
         $required = if ($body -match '(?:^|\s)defers-to=\S') {
-            @('id', 'defers-to', 'read-at')
+            @('id', 'defers-to', 'read-at', 'status')
         } else {
-            @('id', 'baseline', 'metric', 'target', 'read-at', 'evidence')
+            @('id', 'baseline', 'metric', 'target', 'read-at', 'evidence', 'mover', 'status')
+        }
+        if (($body -match '(?:^|\s)status=open(?:\s|$)') -and ($body -notmatch '(?:^|\s)defers-to=\S')) {
+            $required += 'confidence'
         }
         foreach ($field in $required) {
             if ($body -notmatch ("(?:^|\s)" + [regex]::Escape($field) + "=\S")) {
@@ -501,6 +534,80 @@ if (Test-Path -LiteralPath (Join-Path $projectRoot 'docs\decision-log.md')) {
         -Condition ($singleMetrics.Count -eq 0 -or ($singleMetrics | ForEach-Object { $_.Groups[1].Value } | Select-Object -Unique).Count -eq $singleMetrics.Count) `
         -PassMessage 'each constraint declares its own single metric without reusing another' `
         -FailMessage 'two constraints declare the same single-metric; one is absorbing the other'
+
+    # ---- Identity. Uniqueness was tested on single-metric and never on id, so
+    # two different contracts -- a closed craft constraint of 2026-08-30 and the
+    # VAT constraint of 2026-09-03 -- both answered to id=006 for three days
+    # while 131 checks stayed green. An id naming two contracts names neither,
+    # and every prose reference to it becomes ambiguous.
+    $dupIds = @($recordIds | Group-Object | Where-Object { $_.Count -gt 1 } | ForEach-Object { $_.Name })
+    Add-AuditResult `
+        -Condition ($dupIds.Count -eq 0) `
+        -PassMessage "every constraint id is unique across $($records.Count) record(s)" `
+        -FailMessage ("constraint id reused by more than one record: " + ($dupIds -join ', ') + ". An id that names two contracts names neither.")
+
+    # ---- Who moves the number. 'Against Proxy Optimization' (arXiv 2606.23597)
+    # shows that maximising a proxy ends BELOW doing nothing once the unmeasured
+    # features it crowds out are counted. Constraint #001 is that result in the
+    # field: 'fill 15 records' stood in for 'one riyal', and eight sessions of
+    # honest effort moved the proxy to zero and the riyal to zero. The operative
+    # form of the rule: any number the owner can move alone at 2am is a proxy.
+    # mover=stranger means an outsider must act before the number can move.
+    $moverBad = [System.Collections.Generic.List[string]]::new()
+    $openSelf = [System.Collections.Generic.List[string]]::new()
+    $openStranger = [System.Collections.Generic.List[string]]::new()
+    $confBad = [System.Collections.Generic.List[string]]::new()
+    foreach ($rec in $records) {
+        $body = $rec.Groups[1].Value
+        $idM = [regex]::Match($body, '(?:^|\s)id=(\S+)')
+        $id = if ($idM.Success) { $idM.Groups[1].Value } else { '?' }
+        $mv = [regex]::Match($body, '(?:^|\s)mover=(\S+)')
+        if ($mv.Success -and $mv.Groups[1].Value -notin @('self', 'stranger')) {
+            $moverBad.Add("#$id declares mover=$($mv.Groups[1].Value); only self or stranger are legal")
+        }
+        $st = [regex]::Match($body, '(?:^|\s)status=(\S+)')
+        if ($st.Success -and $st.Groups[1].Value -notin @('open', 'closed')) {
+            $moverBad.Add("#$id declares status=$($st.Groups[1].Value); only open or closed are legal")
+        }
+        $isOpen = $st.Success -and $st.Groups[1].Value -eq 'open'
+        if ($isOpen -and $mv.Success -and $mv.Groups[1].Value -eq 'self')     { $openSelf.Add("#$id") }
+        if ($isOpen -and $mv.Success -and $mv.Groups[1].Value -eq 'stranger') { $openStranger.Add("#$id") }
+        # A confidence is a forecast, so it must be a number a Brier score can
+        # later read. 'high' and 'likely' cannot be scored and are not accepted.
+        $cf = [regex]::Match($body, '(?:^|\s)confidence=(\S+)')
+        if ($cf.Success) {
+            $v = $cf.Groups[1].Value
+            if ($v -notmatch '^\d{1,3}$' -or [int]$v -gt 100) {
+                $confBad.Add("#$id declares confidence=$v; it must be an integer 0-100 so a Brier score can read it")
+            }
+        }
+    }
+    Add-AuditResult `
+        -Condition ($moverBad.Count -eq 0) `
+        -PassMessage 'every constraint declares a legal mover and status value' `
+        -FailMessage ("illegal mover/status values: " + ($moverBad -join '; '))
+    Add-AuditResult `
+        -Condition ($confBad.Count -eq 0) `
+        -PassMessage 'every declared confidence is a scoreable integer 0-100' `
+        -FailMessage ("unscoreable confidence values: " + ($confBad -join '; '))
+
+    # A board of nothing but self-moved constraints is a workshop, not a gate.
+    Add-AuditResult `
+        -Condition (($records.Count -eq 0) -or ($openStranger.Count -ge 1)) `
+        -PassMessage "at least one open constraint needs an outsider to act ($($openStranger -join ', '))" `
+        -FailMessage 'no open constraint requires a stranger to act; every open number can be moved alone, which is the proxy trap by definition'
+
+    # ---- Commitment device. The warning raised in prose with constraint #007
+    # -- 'no video before the first slot' -- had no teeth, because prose stops
+    # nobody. While the market gate is breached the board may hold ONE craft
+    # constraint (the gate's own) and no second. This clears itself the moment
+    # a real slot is filled; it cannot be cleared by more craft.
+    if ($script:MarketGateBreached) {
+        Add-AuditResult `
+            -Condition ($openSelf.Count -le 1) `
+            -PassMessage 'market gate is breached and only the gate constraint itself is open' `
+            -FailMessage ("MARKET GATE BREACHED AND $($openSelf.Count) SELF-MOVED CONSTRAINTS ARE OPEN (" + ($openSelf -join ', ') + "). While the gate is red only its own craft constraint may stay open; a second one is the same defect wearing a new cover. Fill a slot -- do not open more craft.")
+    }
 }
 
 

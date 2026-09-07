@@ -1,4 +1,4 @@
-param()
+﻿param()
 
 $ErrorActionPreference = 'Stop'
 
@@ -184,6 +184,105 @@ try {
 finally {
     if (Test-Path -LiteralPath $outsideFile) {
         Remove-Item -LiteralPath $outsideFile -Force
+    }
+}
+
+# ---------------------------------------------------------------------------
+# Mutation suite: prove the constraint-contract checks FAIL when they should.
+#
+# This project has twice been burned by a check that existed but never ran, and
+# once by a check softened until it passed. A green audit proves nothing about a
+# check unless the check has been seen to go red on a defect it was written for.
+# Each case below breaks exactly one thing in a THROWAWAY COPY of the project --
+# never the working tree -- and asserts the auditor produces a NEW failure line.
+# The baseline diff means pre-existing failures (a breached market gate, say)
+# never mask or fake a result.
+# ---------------------------------------------------------------------------
+function Get-AuditFailureSet {
+    param([string]$Root)
+
+    $previousPreference = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        $out = & $script:PowerShellHost -NoProfile -File (Join-Path $Root 'scripts\audit-project.ps1') 2>&1 | Out-String
+    }
+    finally {
+        $ErrorActionPreference = $previousPreference
+    }
+    $set = [System.Collections.Generic.HashSet[string]]::new()
+    foreach ($line in ($out -split "`r?`n")) {
+        if ($line -match '^FAIL\s+(.+)$') { [void]$set.Add($Matches[1].Trim()) }
+    }
+    return $set
+}
+
+$mutationRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('majlis-mutation-' + [guid]::NewGuid().ToString('N'))
+try {
+    New-Item -ItemType Directory -Path $mutationRoot -Force | Out-Null
+    foreach ($item in @('CLAUDE.md', 'README.md', 'portfolio.md', 'docs', 'scripts', 'tests', '.claude', 'vendor')) {
+        $src = Join-Path $testRoot $item
+        if (Test-Path -LiteralPath $src) {
+            Copy-Item -LiteralPath $src -Destination $mutationRoot -Recurse -Force
+        }
+    }
+    $mutantLog = Join-Path $mutationRoot 'docs\decision-log.md'
+
+    if (-not (Test-Path -LiteralPath $mutantLog)) {
+        # A fork running on the published tree has no private decision log. Say so
+        # rather than reporting a pass the suite never actually earned.
+        Write-Host 'Mutation suite skipped: docs/decision-log.md is not present (published tree).' -ForegroundColor Yellow
+    }
+    else {
+        $pristine = Get-Content -LiteralPath $mutantLog -Raw -Encoding UTF8
+        $baseline = Get-AuditFailureSet -Root $mutationRoot
+
+        # Each case: a name, a mutation applied to the decision log, and a
+        # fragment that MUST appear in a failure line the baseline did not have.
+        $mutations = @(
+            @{ Name = 'duplicate constraint id'
+               From = 'id=008 baseline=7'
+               To   = 'id=007 baseline=7'
+               Expect = 'id reused by more than one record' },
+            @{ Name = 'illegal mover value'
+               From = 'id=001 baseline=0 metric=complete-entity-records target=15 read-at=2026-09-03 evidence=docs/entity-records-draft.md mover=self'
+               To   = 'id=001 baseline=0 metric=complete-entity-records target=15 read-at=2026-09-03 evidence=docs/entity-records-draft.md mover=whenever'
+               Expect = 'illegal mover/status values' },
+            @{ Name = 'unscoreable confidence'
+               From = 'status=open confidence=30'
+               To   = 'status=open confidence=high'
+               Expect = 'unscoreable confidence values' },
+            @{ Name = 'open constraint missing mover'
+               From = 'evidence=docs/playbook-vat-referral-engine.md mover=stranger'
+               To   = 'evidence=docs/playbook-vat-referral-engine.md'
+               Expect = "is missing 'mover'" },
+            @{ Name = 'open constraint missing confidence'
+               From = 'mover=stranger status=open confidence=15'
+               To   = 'mover=stranger status=open'
+               Expect = "is missing 'confidence'" },
+            @{ Name = 'no stranger-moved constraint open'
+               From = 'mover=stranger status=open confidence=15'
+               To   = 'mover=self status=open confidence=15'
+               Expect = 'no open constraint requires a stranger to act' }
+        )
+
+        foreach ($m in $mutations) {
+            if (-not $pristine.Contains($m.From)) {
+                Add-Failure "mutation '$($m.Name)' could not be applied: anchor text is gone from the decision log, so the check is no longer being exercised"
+                continue
+            }
+            Set-Content -LiteralPath $mutantLog -Value $pristine.Replace($m.From, $m.To) -Encoding UTF8 -NoNewline
+            $after = Get-AuditFailureSet -Root $mutationRoot
+            $new = @($after | Where-Object { -not $baseline.Contains($_) })
+            if (-not ($new | Where-Object { $_ -like "*$($m.Expect)*" })) {
+                Add-Failure "auditor stayed silent on mutation '$($m.Name)'; expected a new failure containing '$($m.Expect)'"
+            }
+            Set-Content -LiteralPath $mutantLog -Value $pristine -Encoding UTF8 -NoNewline
+        }
+    }
+}
+finally {
+    if (Test-Path -LiteralPath $mutationRoot) {
+        Remove-Item -LiteralPath $mutationRoot -Recurse -Force -ErrorAction SilentlyContinue
     }
 }
 

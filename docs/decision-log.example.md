@@ -15,7 +15,7 @@
 ## قيد #001
 
 <!-- single-metric=your-metric-slug -->
-<!-- constraint-record id=001 baseline=0 metric=your-metric-slug target=1 read-at=YYYY-MM-DD evidence=path/to/proof -->
+<!-- constraint-record id=001 baseline=0 metric=your-metric-slug target=1 read-at=YYYY-MM-DD evidence=path/to/proof mover=stranger status=open confidence=50 -->
 
 | الحقل | المحتوى |
 |---|---|

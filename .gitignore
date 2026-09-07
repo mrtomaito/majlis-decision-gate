@@ -27,3 +27,10 @@ docs/audit-2026-08-20.md
 docs/CLAUDE.backup-*.md
 docs/unit-economics-book.md
 .review-quarantine-*/
+
+# ---- Client engagements: a third party's confidential book ----
+# These carry a real named client's budget, price list, and case precedent.
+# The framework is public; a client's file never is. Same rule as portfolio.md.
+docs/intake/
+docs/playbook-vat-referral-engine.md
+reports/
