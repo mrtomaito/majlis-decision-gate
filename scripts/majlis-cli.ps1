@@ -267,7 +267,34 @@ function Show-Triage {
 function Verify-EntityRecords {
     $filePath = Resolve-ProjectFilePath -Path $EntityFile
     if (-not (Test-Path -LiteralPath $filePath)) {
-        Write-Error "File $filePath not found!"
+        # The owner's entity draft is a PRIVATE ledger and is gitignored, so on a
+        # fresh clone of the published repo this path does not exist. Treating
+        # that as a hard failure made the contract suite red on first run for
+        # every fork -- punishing them for the owner's gitignore. An explicitly
+        # passed -EntityFile that is missing is still a real error.
+        if ($PSBoundParameters.ContainsKey('EntityFile')) {
+            Write-Error "File $filePath not found!"
+            exit 1
+        }
+        # NOTHING WAS MEASURED. Say so in the loudest terms the command has --
+        # a silent exit 0 here would be the green anesthesia this project exists
+        # to prevent. No count is printed, because no count was read.
+        if ($Json) {
+            [PSCustomObject]@{
+                File        = $EntityFile
+                LedgerFound = $false
+                Measured    = $false
+                Note        = 'Private entity ledger absent (published or forked tree). Nothing was measured. Copy docs/entity-records-draft.example.md to docs/entity-records-draft.md to start your own.'
+            } | ConvertTo-Json -Depth 3
+            return
+        }
+        Show-Header "Entity Records Validation & Privacy (PDPL) Check"
+        Write-Host "  [NO LEDGER] $EntityFile is not present." -ForegroundColor Yellow
+        Write-Host "              This is expected on a published or forked tree: the entity" -ForegroundColor Yellow
+        Write-Host "              draft is a private ledger and is gitignored." -ForegroundColor Yellow
+        Write-Host "  NOTHING WAS MEASURED -- this is not a pass and not a market reading." -ForegroundColor Yellow
+        Write-Host "  Start your own: copy docs/entity-records-draft.example.md to $EntityFile" -ForegroundColor Cyan
+        Write-Host ''
         return
     }
 
