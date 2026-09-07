@@ -97,11 +97,30 @@ foreach ($case in $jsonCases) {
 $privacyResult = Invoke-MajlisCli -CliArgs @('verify-entity', '-Json')
 if ($privacyResult.ExitCode -eq 0) {
     $privacyJson = $privacyResult.Output | ConvertFrom-Json
-    if ($privacyJson.PrivacyCheck.PSObject.Properties.Name -contains 'IsCompliant') {
-        Add-Failure 'verify-entity must not self-certify legal compliance'
+    # On a published or forked tree the private ledger is absent, so nothing was
+    # scanned. Demanding a privacy verdict there would force the command to
+    # invent one -- the fabricated-field defect of constraint #005. So the
+    # assertion splits by branch, and BOTH branches keep teeth: a measured run
+    # must publish the narrow fact, and an unmeasured run must publish no
+    # verdict and no count at all.
+    $measured = -not ($privacyJson.PSObject.Properties.Name -contains 'Measured' -and $privacyJson.Measured -eq $false)
+    if ($measured) {
+        if ($privacyJson.PrivacyCheck.PSObject.Properties.Name -contains 'IsCompliant') {
+            Add-Failure 'verify-entity must not self-certify legal compliance'
+        }
+        if (-not ($privacyJson.PrivacyCheck.PSObject.Properties.Name -contains 'NoContactDataDetected')) {
+            Add-Failure 'verify-entity must report the narrow fact NoContactDataDetected'
+        }
     }
-    if (-not ($privacyJson.PrivacyCheck.PSObject.Properties.Name -contains 'NoContactDataDetected')) {
-        Add-Failure 'verify-entity must report the narrow fact NoContactDataDetected'
+    else {
+        foreach ($forbidden in @('PrivacyCheck', 'FilledCount', 'SlotsCount', 'GatePassed')) {
+            if ($privacyJson.PSObject.Properties.Name -contains $forbidden) {
+                Add-Failure "verify-entity reported '$forbidden' on a tree with no ledger; nothing was measured, so any such field is invented"
+            }
+        }
+        if (-not ($privacyJson.PSObject.Properties.Name -contains 'Note')) {
+            Add-Failure 'verify-entity must explain, in Note, that nothing was measured when the ledger is absent'
+        }
     }
 }
 
