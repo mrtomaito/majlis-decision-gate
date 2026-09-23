@@ -40,9 +40,9 @@ $projectRoot = Split-Path -Parent $PSScriptRoot
 # These are the repo owner's values; they are copy, not logic.
 # ---------------------------------------------------------------------------
 $ActiveConstraint = @{
-    Project     = 'ai-freelance-income (KADR)'
+    Project     = 'khatm (field e-invoicing setup)'
     LaunchState = 'Validation Candidate (0 named buyers, 0 PII)'
-    Sprint      = 'Build 15 entity-record-v1 slots before 2026-09-03'
+    Sprint      = 'Overdue since 2026-09-03 (date not extended): next empty slot ER-KHATM-002'
     Metric      = 'Complete entity records count (Internal Draft)'
 }
 
@@ -83,7 +83,7 @@ function Resolve-ProjectFilePath {
 function Get-ProjectDeadlines {
     $now = (Get-Date).Date
     $deadlines = [ordered]@{
-        'Constraint #001: 15 Entity Records (kadr)' = [DateTime]::Parse('2026-09-03')
+        'Constraint #001: 15 Entity Records (khatm)' = [DateTime]::Parse('2026-09-03')
         'Constraint #001: First 600 SAR Deal'       = [DateTime]::Parse('2026-09-17')
         'System Exit Standard: First Riyal (90d)'   = [DateTime]::Parse('2026-11-18')
         'ZATCA: Penalties Cancellation Deadline'    = [DateTime]::Parse('2026-12-31')
