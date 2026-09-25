@@ -173,6 +173,30 @@ function Show-Status {
     Write-Host ''
 }
 
+function Read-CommentFields {
+    param([string]$Body)
+
+    $fields = @{}
+    foreach ($m in [regex]::Matches($Body, '([A-Za-z][\w-]*)=(?:"([^"]*)"|(\S+))')) {
+        $fields[$m.Groups[1].Value] = if ($m.Groups[2].Success) { $m.Groups[2].Value } else { $m.Groups[3].Value }
+    }
+    return $fields
+}
+
+function Get-ClosedStrangerCount {
+    $logPath = Join-Path $projectRoot 'docs\decision-log.md'
+    if (-not (Test-Path -LiteralPath $logPath)) { return 0 }
+    $log = Get-Content -LiteralPath $logPath -Raw -Encoding UTF8
+    $n = 0
+    foreach ($rec in [regex]::Matches($log, '<!-- constraint-record ([^>]*?)-->')) {
+        $body = $rec.Groups[1].Value
+        $closed = $body -match '(?:^|\s)status=closed(?:\s|$)'
+        $stranger = $body -match '(?:^|\s)mover=stranger(?:\s|$)'
+        if ($closed -and $stranger) { $n++ }
+    }
+    return $n
+}
+
 function Show-Triage {
     $scoringPath = [System.IO.Path]::Combine($projectRoot, 'docs', 'scoring-model.md')
     if (-not (Test-Path -LiteralPath $scoringPath)) {
@@ -227,10 +251,41 @@ function Show-Triage {
 
     $topCandidate = if ($sortedResults.Count -gt 0) { $sortedResults[0] } else { $null }
 
+    $outsideMatch = [regex]::Match($scoringText, '<!-- outside-view\s+(.*?)\s*-->')
+    if (-not $outsideMatch.Success) { throw 'scoring model is missing the outside-view marker' }
+    $outsideFields = Read-CommentFields -Body $outsideMatch.Groups[1].Value
+    foreach ($key in @('class', 'distribution', 'grade', 'source', 'as-of', 'note')) {
+        if (-not $outsideFields.ContainsKey($key) -or [string]::IsNullOrWhiteSpace([string]$outsideFields[$key])) {
+            throw "outside-view marker is missing $key"
+        }
+    }
+
+    $standardPath = Join-Path $projectRoot 'docs\evidence-standard.md'
+    $standardText = Get-Content -LiteralPath $standardPath -Raw -Encoding UTF8
+    $floorMatch = [regex]::Match($standardText, '<!-- forecast-floor closed-stranger=(\d+) -->')
+    if (-not $floorMatch.Success) { throw 'evidence standard is missing forecast-floor' }
+    $floor = [int]$floorMatch.Groups[1].Value
+    $closedStranger = Get-ClosedStrangerCount
+    $sortKeyNote = 'مفتاح فرز لا احتمال'
+    $outsideLine = "class=$($outsideFields['class']) internal=$($outsideFields['distribution']) grade=$($outsideFields['grade']) source=$($outsideFields['source']) as-of=$($outsideFields['as-of']) | $($outsideFields['note'])"
+    $belowFloor = $closedStranger -lt $floor
+    $calibration = if ($belowFloor) { 'غير قابل للترتيب' } else { $null }
+
     if ($Json) {
         $data = [PSCustomObject]@{
             Scorecard        = $sortedResults
             TopCandidate     = $topCandidate
+            SortKeyNote      = $sortKeyNote
+            OutsideView      = [PSCustomObject]@{
+                Class        = $outsideFields['class']
+                Distribution = $outsideFields['distribution']
+                Grade        = $outsideFields['grade']
+                Source       = $outsideFields['source']
+                AsOf         = $outsideFields['as-of']
+                Note         = $outsideFields['note']
+                Line         = $outsideLine
+            }
+            Calibration      = $calibration
             Weights          = $weights
             TieBreakers      = @(
                 "1) Named Buyer Evidence",
@@ -247,18 +302,20 @@ function Show-Triage {
     Show-Header "Deterministic Portfolio Triage & Scoring Engine"
 
     Write-Host "  Deterministic Evidence-Backed Scorecard:" -ForegroundColor White
-    Write-Host "  +--------------------------+----+----+----+----+----+-----------+------------------+" -ForegroundColor DarkGray
-    Write-Host "  | Project Name             | Ax3| Bx3| Cx2| Dx2| Ex1| Total /33 | Launch Status    |" -ForegroundColor Cyan
-    Write-Host "  +--------------------------+----+----+----+----+----+-----------+------------------+" -ForegroundColor DarkGray
+    Write-Host "  +--------------------------+----+----+----+----+----+-----------+--------------------+" -ForegroundColor DarkGray
+    Write-Host "  | Project Name             | Ax3| Bx3| Cx2| Dx2| Ex1| Total /33 | Launch Status      |" -ForegroundColor Cyan
+    Write-Host "  +--------------------------+----+----+----+----+----+-----------+--------------------+" -ForegroundColor DarkGray
 
     foreach ($res in $sortedResults) {
-        Write-Host ("  | {0,-24} | {1,2} | {2,2} | {3,2} | {4,2} | {5,2} |   {6,2}/33  | {7,-16} |" -f `
+        Write-Host ("  | {0,-24} | {1,2} | {2,2} | {3,2} | {4,2} | {5,2} |   {6,2}/33  | {7,-19} |" -f `
             $res.Project, $res.A, $res.B, $res.C, $res.D, $res.E, $res.Total, $res.Status) -ForegroundColor White
     }
-    Write-Host "  +--------------------------+----+----+----+----+----+-----------+------------------+" -ForegroundColor DarkGray
+    Write-Host "  +--------------------------+----+----+----+----+----+-----------+--------------------+" -ForegroundColor DarkGray
     Write-Host ''
-    if ($topCandidate) {
-        Write-Host ("  Ruling: #1 Focus Candidate is {0} ({1}/33)." -f $topCandidate.Project, $topCandidate.Total) -ForegroundColor Green
+    Write-Host "  $sortKeyNote" -ForegroundColor Gray
+    Write-Host "  outside-view: $outsideLine" -ForegroundColor Gray
+    if ($belowFloor) {
+        Write-Host "  $calibration ($closedStranger/$floor closed stranger constraints)" -ForegroundColor Gray
     }
     Write-Host "  Tie-Breaker: 1) Buyer Evidence 2) Demand Proof 3) Cash Bleed 4) Measured CVI 5) External Deadline" -ForegroundColor Gray
     Write-Host ''

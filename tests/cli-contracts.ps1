@@ -137,6 +137,48 @@ if ($statusResult.ExitCode -eq 0) {
     }
 }
 
+$triageText = Invoke-MajlisCli -CliArgs @('triage')
+if ($triageText.ExitCode -ne 0) {
+    Add-Failure "triage text failed (exit $($triageText.ExitCode))"
+}
+else {
+    if ($triageText.Output -notmatch [regex]::Escape('مفتاح فرز لا احتمال')) {
+        Add-Failure 'triage text must say the total is a sort key, not a probability'
+    }
+    if ($triageText.Output -notmatch [regex]::Escape('لا توزيع — النظرة الداخلية ليست قراراً')) {
+        Add-Failure 'triage text must print the outside-view note'
+    }
+    if ($triageText.Output -match 'Ruling') {
+        Add-Failure 'triage text must not present the total as a Ruling'
+    }
+    if ($triageText.Output -notmatch [regex]::Escape('غير قابل للترتيب')) {
+        Add-Failure 'triage text must say the forecast is unrankable below the stranger-closure floor'
+    }
+}
+
+$triageJsonResult = Invoke-MajlisCli -CliArgs @('triage', '-Json')
+if ($triageJsonResult.ExitCode -ne 0) {
+    Add-Failure "triage JSON failed (exit $($triageJsonResult.ExitCode))"
+}
+else {
+    $triageJson = $triageJsonResult.Output | ConvertFrom-Json
+    if ($triageJson.SortKeyNote -ne 'مفتاح فرز لا احتمال') {
+        Add-Failure 'triage JSON SortKeyNote must label the total as a sort key'
+    }
+    if ($null -eq $triageJson.OutsideView -or $triageJson.OutsideView.Note -ne 'لا توزيع — النظرة الداخلية ليست قراراً') {
+        Add-Failure 'triage JSON OutsideView.Note must carry the no-distribution sentence'
+    }
+    if ($triageJson.OutsideView.Distribution -ne 'collected-riyals=0') {
+        Add-Failure 'triage JSON OutsideView.Distribution must be the portfolio zero'
+    }
+    if ($triageJson.Calibration -ne 'غير قابل للترتيب') {
+        Add-Failure 'triage JSON Calibration must be unrankable while closed stranger constraints are under the floor'
+    }
+    if ($triageJsonResult.Output -match 'Ruling') {
+        Add-Failure 'triage JSON must not contain Ruling'
+    }
+}
+
 $zeroMarginResult = Invoke-MajlisCli -CliArgs @('calc-cvi', '-Revenue', '600', '-Days', '14', '-Margin', '0', '-Json')
 if ($zeroMarginResult.ExitCode -ne 0) {
     Add-Failure 'calc-cvi rejected a valid zero-margin scenario'
@@ -297,6 +339,31 @@ try {
             }
             Set-Content -LiteralPath $mutantLog -Value $pristine -Encoding UTF8 -NoNewline
         }
+
+        $mutantScoring = Join-Path $mutationRoot 'docs\scoring-model.md'
+        $scorePristine = Get-Content -LiteralPath $mutantScoring -Raw -Encoding UTF8
+        if (-not $scorePristine.Contains('<!-- outside-view ')) {
+            Add-Failure "mutation 'missing outside-view' could not be applied: marker is gone from the scoring model"
+        }
+        else {
+            Set-Content -LiteralPath $mutantScoring -Value $scorePristine.Replace('<!-- outside-view ', '<!-- removed-outside-view ') -Encoding UTF8 -NoNewline
+            $afterOutside = Get-AuditFailureSet -Root $mutationRoot
+            $newOutside = @($afterOutside | Where-Object { -not $baseline.Contains($_) })
+            if (-not ($newOutside | Where-Object { $_ -like '*outside-view contract failed*' })) {
+                Add-Failure "auditor stayed silent on mutation 'missing outside-view'; expected a new failure containing 'outside-view contract failed'"
+            }
+            Set-Content -LiteralPath $mutantScoring -Value $scorePristine -Encoding UTF8 -NoNewline
+        }
+
+        $mutantCli = Join-Path $mutationRoot 'scripts\majlis-cli.ps1'
+        $cliPristine = Get-Content -LiteralPath $mutantCli -Raw -Encoding UTF8
+        Set-Content -LiteralPath $mutantCli -Value ($cliPristine + "`r`n# Ruling probe`r`n") -Encoding UTF8 -NoNewline
+        $afterRuling = Get-AuditFailureSet -Root $mutationRoot
+        $newRuling = @($afterRuling | Where-Object { -not $baseline.Contains($_) })
+        if (-not ($newRuling | Where-Object { $_ -like '*presents the total as a Ruling*' })) {
+            Add-Failure "auditor stayed silent on mutation 'Ruling'; expected a new failure containing 'presents the total as a Ruling'"
+        }
+        Set-Content -LiteralPath $mutantCli -Value $cliPristine -Encoding UTF8 -NoNewline
     }
 }
 finally {

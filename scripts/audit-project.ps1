@@ -380,6 +380,55 @@ if (Test-Path -LiteralPath (Join-Path $projectRoot 'docs\scoring-model.md')) {
             -PassMessage "scorecard row for $project recalculates to $total/33 from its own evidence" `
             -FailMessage $(if (-not $declared.Success) { "$project has evidence records but no **N/33** total in the scorecard table" } else { "$project declares $($declared.Groups[1].Value)/33 but its evidence sums to $total" })
     }
+
+    # The /33 total is a sort key. Printing it as a ruling is the false precision
+    # this check exists to keep red. One result covers a missing outside view and
+    # a total presented as a probability.
+    $outsideProblems = [System.Collections.Generic.List[string]]::new()
+    $outsideMatch = [regex]::Match($scoring, '<!-- outside-view\s+(.*?)\s*-->')
+    if (-not $outsideMatch.Success) {
+        $outsideProblems.Add('scoring model is missing the outside-view marker')
+    }
+    else {
+        $outsideFields = @{}
+        foreach ($m in [regex]::Matches($outsideMatch.Groups[1].Value, '([A-Za-z][\w-]*)=(?:"([^"]*)"|(\S+))')) {
+            $outsideFields[$m.Groups[1].Value] = if ($m.Groups[2].Success) { $m.Groups[2].Value } else { $m.Groups[3].Value }
+        }
+        foreach ($key in @('class', 'distribution', 'grade', 'source', 'as-of', 'note')) {
+            if (-not $outsideFields.ContainsKey($key) -or [string]::IsNullOrWhiteSpace([string]$outsideFields[$key])) {
+                $outsideProblems.Add("outside-view missing $key")
+            }
+        }
+        if ($outsideFields.ContainsKey('grade') -and $outsideFields['grade'] -notmatch '^[abcd]$') {
+            $outsideProblems.Add('outside-view grade must be a, b, c, or d')
+        }
+        $requiredNote = 'لا توزيع — النظرة الداخلية ليست قراراً'
+        $note = [string]$outsideFields['note']
+        $grade = [string]$outsideFields['grade']
+        if ($note -ne $requiredNote -and $grade -ne 'a') {
+            $outsideProblems.Add('outside-view note must be the no-distribution sentence unless grade is a')
+        }
+    }
+    if ($scoring -notmatch [regex]::Escape('مفتاح فرز لا احتمال')) {
+        $outsideProblems.Add('scoring model does not label the total as a sort key')
+    }
+    if ($cliSource -match 'Ruling') {
+        $outsideProblems.Add('majlis-cli.ps1 presents the total as a Ruling')
+    }
+    $forecastStandard = Get-ProjectText 'docs\evidence-standard.md'
+    if ($forecastStandard -notmatch '<!-- forecast-floor closed-stranger=20 -->') {
+        $outsideProblems.Add('evidence standard is missing forecast-floor closed-stranger=20')
+    }
+    if ($forecastStandard -notmatch [regex]::Escape('غير قابل للترتيب')) {
+        $outsideProblems.Add('evidence standard does not name the below-floor label')
+    }
+    if ($forecastStandard -notmatch 'ملء راجع') {
+        $outsideProblems.Add('evidence standard does not reject a confidence written after the outcome')
+    }
+    Add-AuditResult `
+        -Condition ($outsideProblems.Count -eq 0) `
+        -PassMessage 'outside view sits beside the sort key, and the total is not presented as a probability' `
+        -FailMessage ("outside-view contract failed: " + ($outsideProblems -join '; '))
 }
 
 if (Test-Path -LiteralPath (Join-Path $projectRoot 'docs\evidence-standard.md')) {

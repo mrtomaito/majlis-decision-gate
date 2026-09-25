@@ -81,7 +81,7 @@ $$\text{CVI} = \frac{\text{الإيراد المتوقع من أول صفقة (�
 
 | المشروع | الإيراد | أيام التحصيل | الهامش الإجمالي | صلاحية المقارنة |
 |---|---|---|---|---|
-| `ai-freelance-income` | 600﷼ سعر معلن (ج) | 7–30 يوماً (د) | مجهول حتى أول تسليم (د) | غير صالح للحسم بعد |
+| `khatm` | 600﷼ سعر معلن (ج) | 7–30 يوماً (د) | مجهول حتى أول تسليم (د) | غير صالح للحسم بعد |
 | `realestate-ai-employee` | 5,000﷼ تقدير (د) | 42–112 يوماً (د) | مجهول بعد التكاليف (د) | غير صالح للحسم بعد |
 | `zatca-einvoicing-warraq` | مجهول | مجهول | مجهول | لا يُحسب |
 
@@ -104,7 +104,7 @@ $$\text{CVI} = \frac{\text{الإيراد المتوقع من أول صفقة (�
 
 | المشروع | أ | ب | ج | د | هـ | المجموع | حالة الإطلاق |
 |---|---:|---:|---:|---:|---:|---:|---|
-| `ai-freelance-income` | 3×3 | 1×3 | 2×2 | 2×2 | 3×1 | **23/33** | مرشح تحقق؛ صفر مشترٍ مسمّى في الدفتر |
+| `khatm` | 3×3 | 1×3 | 2×2 | 2×2 | 3×1 | **23/33** | مرشح تحقق؛ صفر مشترٍ مسمّى في الدفتر |
 | `realestate-ai-employee` | 2×3 | 0×3 | 3×2 | 3×2 | 2×1 | **20/33** | مرشح تحقق؛ «ملاك العقار» شريحة لا اسم |
 | `zatca-einvoicing-warraq` | 0×3 | 1×3 | 2×2 | 0×2 | 3×1 | **10/33** | غير جاهز؛ حالة الشراكة والمنصة مجهولة |
 
@@ -130,11 +130,11 @@ $$\text{CVI} = \frac{\text{الإيراد المتوقع من أول صفقة (�
 | ورّاق | د | 0 | د · إعادة الاستخدام والحصة مجهولتان |
 | ورّاق | هـ | 3 | د · الدخل المتكرر فرضية بلا بيانات صفقة |
 
-<!-- score-evidence project=ai-freelance-income axis=a score=3 grade=c source=portfolio.md#ai-freelance-income -->
-<!-- score-evidence project=ai-freelance-income axis=b score=1 grade=a source=docs/source-register.md#zatca-wave-25 -->
-<!-- score-evidence project=ai-freelance-income axis=c score=2 grade=a source=docs/source-register.md#zatca-wave-25 -->
-<!-- score-evidence project=ai-freelance-income axis=d score=2 grade=c source=portfolio.md#ai-freelance-income -->
-<!-- score-evidence project=ai-freelance-income axis=e score=3 grade=d source=portfolio.md#ai-freelance-income -->
+<!-- score-evidence project=khatm axis=a score=3 grade=c source=portfolio.md#khatm -->
+<!-- score-evidence project=khatm axis=b score=1 grade=a source=docs/source-register.md#zatca-wave-25 -->
+<!-- score-evidence project=khatm axis=c score=2 grade=a source=docs/source-register.md#zatca-wave-25 -->
+<!-- score-evidence project=khatm axis=d score=2 grade=c source=portfolio.md#khatm -->
+<!-- score-evidence project=khatm axis=e score=3 grade=d source=portfolio.md#khatm -->
 <!-- score-evidence project=realestate-ai-employee axis=a score=2 grade=c source=portfolio.md#realestate-ai-employee -->
 <!-- score-evidence project=realestate-ai-employee axis=b score=0 grade=d source=portfolio.md#realestate-ai-employee -->
 <!-- score-evidence project=realestate-ai-employee axis=c score=3 grade=c source=portfolio.md#realestate-ai-employee -->
@@ -145,6 +145,16 @@ $$\text{CVI} = \frac{\text{الإيراد المتوقع من أول صفقة (�
 <!-- score-evidence project=zatca-einvoicing-warraq axis=c score=2 grade=a source=docs/source-register.md#zatca-wave-25 -->
 <!-- score-evidence project=zatca-einvoicing-warraq axis=d score=0 grade=d source=portfolio.md#zatca-einvoicing-warraq -->
 <!-- score-evidence project=zatca-einvoicing-warraq axis=e score=3 grade=d source=portfolio.md#zatca-einvoicing-warraq -->
+
+---
+
+## مفتاح فرز لا احتمال
+
+المجموع من 33 مفتاح فرز لا احتمال. ليس احتمالاً، ولا يُمزج مع حقل `confidence`، ولا يُقرأ كجودة للمستشار.
+
+<!-- outside-view class=portfolio-built-unpaid distribution=collected-riyals=0 grade=c source=docs/decision-log.md as-of=2026-09-26 note="لا توزيع — النظرة الداخلية ليست قراراً" -->
+
+فئة النظرة الخارجية: مشاريع هذه المحفظة التي بُنيت. التوزيع المسموح درجة ج: ريال محصّل = 0 حتى 2026-09-26، والمصدر `docs/decision-log.md`. هذا ليس معدل نجاح في السوق. لا توزيع خارجي بمصدر أولي، لذلك النظرة الداخلية ليست قراراً، ومفتاح الفرز لا يغلب هذا السطر.
 
 ---
 
